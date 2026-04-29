@@ -149,6 +149,7 @@ class BlaeckTCmPy:
         self._tcp.start_listening()
 
         self._started = True
+        self._start_time = time.time()
         self._update_schema_hash()
 
         # Activate fixed interval if set
@@ -394,6 +395,11 @@ class BlaeckTCmPy:
     def connected(self):
         """True if any client is connected."""
         return bool(self._tcp._clients)
+
+    @property
+    def start_time(self):
+        """Wall-clock time when start() was called (time.time())."""
+        return self._start_time
 
     @property
     def data_clients(self):

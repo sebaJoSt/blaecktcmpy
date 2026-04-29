@@ -1,7 +1,7 @@
-"""Localhost example for testing blaecktcmpy on a PC (CPython).
+"""Sine Generator — serves three sine signals over TCP.
 
-Run this script, then connect with Loggbok to 127.0.0.1:9325.
-No hardware or WiFi required.
+The simplest blaecktcmpy example. Run this, then connect Loggbok
+(or any BlaeckTCP client) to 127.0.0.1:9325 to see live data.
 
 Usage:
     pip install -e .
@@ -11,48 +11,31 @@ Usage:
 import math
 import time
 
-from blaecktcmpy import BlaeckTCmPy, Signal
+from blaecktcmpy import BlaeckTCmPy
 
-# -- Create BlaeckTCmPy Server --
+EXAMPLE_VERSION = "1.0"
+
 bltcp = BlaeckTCmPy(
     ip="127.0.0.1",
     port=9325,
-    device_name="PC Test",
-    device_hw_version="Desktop",
-    device_fw_version="1.0",
+    device_name="Sine Generator",
+    device_hw_version="Python Script",
+    device_fw_version=EXAMPLE_VERSION,
 )
 
-# -- Add Signals --
-bltcp.add_signal("counter", "unsigned int", 0)
-bltcp.add_signal("sine", "float", 0.0)
-bltcp.add_signal("led_state", "bool", False)
+for i in range(1, 4):
+    bltcp.add_signal("Sine_{}".format(i), "float")
 
-
-# -- Register command handler --
-@bltcp.on_command("SET_LED")
-def handle_led(state):
-    led_val = int(state) if state else 0
-    bltcp.signals["led_state"].value = bool(led_val)
-    print("LED set to:", led_val)
-
-
-# -- Before-write callback to refresh values --
-@bltcp.on_before_write()
-def refresh_signals():
-    counter = bltcp.signals["counter"].value
-    bltcp.signals["counter"].value = (counter + 1) % 65536
-    bltcp.signals["sine"].value = math.sin(time.time())
-
-
-# -- Start server --
 bltcp.start()
 
-# -- Main loop --
-print("Press Ctrl+C to stop")
 try:
     while True:
+        elapsed_ms = (time.time() - bltcp.start_time) * 1000
+        value = math.sin(elapsed_ms * 0.001)
+        for s in bltcp.signals:
+            s.value = value
         bltcp.tick()
-        time.sleep(0.001)  # Prevent busy-loop on CPython
+        time.sleep(0.001)
 except KeyboardInterrupt:
     bltcp.close()
-    print("Done.")
+
