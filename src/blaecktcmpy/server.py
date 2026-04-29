@@ -24,15 +24,21 @@ def _now_us(epoch_offset_us: int) -> int:
 
     On CPython: uses time.time_ns() for full precision.
     On MicroPython: uses time.time() (integer seconds) + ticks_us()
-    for sub-second interpolation.
+    for sub-second interpolation, with a consistency check to avoid
+    a race at second boundaries.
     """
     if hasattr(time, "time_ns"):
         return time.time_ns() // 1_000 + epoch_offset_us
     # MicroPython: time.time() is integer seconds from platform epoch.
-    # Use ticks_us() modulo 1_000_000 for the sub-second fraction.
-    sec = int(time.time())
+    # Read seconds before and after ticks_us to detect a boundary crossing.
+    sec1 = int(time.time())
     frac = _ticks_us() % 1_000_000
-    return sec * 1_000_000 + frac + epoch_offset_us
+    sec2 = int(time.time())
+    if sec1 != sec2:
+        # Second rolled over during read — re-sample with new second
+        frac = _ticks_us() % 1_000_000
+        sec1 = sec2
+    return sec1 * 1_000_000 + frac + epoch_offset_us
 
 from .signal import Signal, SignalList, DATATYPE_TO_CODE
 from .encoder import (
@@ -72,10 +78,12 @@ class TimestampMode:
     """Timestamp modes for data frames.
 
     NONE (0): No timestamp in data frames (default).
+    MICROS (1): Microseconds since start (like Arduino micros()).
     UNIX (2): Microseconds since Unix epoch.
     """
 
     NONE: int = 0
+    MICROS: int = 1
     UNIX: int = 2
 
 
@@ -85,6 +93,7 @@ INTERVAL_OFF = IntervalMode.OFF
 
 # Timestamp mode constants
 TIMESTAMP_NONE = TimestampMode.NONE
+TIMESTAMP_MICROS = TimestampMode.MICROS
 TIMESTAMP_UNIX = TimestampMode.UNIX
 
 # Message IDs for data frames
@@ -497,12 +506,12 @@ class BlaeckTCmPy:
 
     @property
     def timestamp_mode(self) -> int:
-        """Timestamp mode: TIMESTAMP_NONE (0) or TIMESTAMP_UNIX (2)."""
+        """Timestamp mode: NONE (0), MICROS (1), or UNIX (2)."""
         return self._timestamp_mode
 
     @timestamp_mode.setter
     def timestamp_mode(self, value: int) -> None:
-        if value not in (TIMESTAMP_NONE, TIMESTAMP_UNIX):
+        if value not in (TIMESTAMP_NONE, TIMESTAMP_MICROS, TIMESTAMP_UNIX):
             raise ValueError("Invalid timestamp_mode: {}".format(value))
         self._timestamp_mode = value
 
@@ -745,6 +754,8 @@ class BlaeckTCmPy:
         """Return auto-generated timestamp for current mode, or None."""
         if self._timestamp_mode == TIMESTAMP_UNIX:
             return _now_us(self._epoch_offset_us)
+        if self._timestamp_mode == TIMESTAMP_MICROS:
+            return _now_us(self._epoch_offset_us) - self._start_time_us
         return None
 
     def _require_started(self) -> None:

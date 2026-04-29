@@ -1,10 +1,10 @@
 {
     "urls": [
-        ["blaecktcmpy/__init__.py", "github:sebaJoSt/blaecktcmpy/blaecktcmpy/__init__.py"],
-        ["blaecktcmpy/signal.py", "github:sebaJoSt/blaecktcmpy/blaecktcmpy/signal.py"],
-        ["blaecktcmpy/encoder.py", "github:sebaJoSt/blaecktcmpy/blaecktcmpy/encoder.py"],
-        ["blaecktcmpy/tcp.py", "github:sebaJoSt/blaecktcmpy/blaecktcmpy/tcp.py"],
-        ["blaecktcmpy/server.py", "github:sebaJoSt/blaecktcmpy/blaecktcmpy/server.py"]
+        ["blaecktcmpy/__init__.py", "github:sebaJoSt/blaecktcmpy/src/blaecktcmpy/__init__.py"],
+        ["blaecktcmpy/signal.py", "github:sebaJoSt/blaecktcmpy/src/blaecktcmpy/signal.py"],
+        ["blaecktcmpy/encoder.py", "github:sebaJoSt/blaecktcmpy/src/blaecktcmpy/encoder.py"],
+        ["blaecktcmpy/tcp.py", "github:sebaJoSt/blaecktcmpy/src/blaecktcmpy/tcp.py"],
+        ["blaecktcmpy/server.py", "github:sebaJoSt/blaecktcmpy/src/blaecktcmpy/server.py"]
     ],
-    "version": "1.0.0"
+    "version": "0.1.0"
 }

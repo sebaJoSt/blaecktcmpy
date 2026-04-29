@@ -3,7 +3,7 @@
 Serves three sine signals over TCP using the Arduino Giga R1
 with an Ethernet shield (W5500) and a static IP address.
 
-Connect Loggbok (or any BlaeckTCP client) to 192.168.1.177:9325.
+Connect a BlaeckTCP client to 192.168.1.177:9325.
 
 Wiring: Attach Ethernet shield to Giga R1, connect via cable.
 """

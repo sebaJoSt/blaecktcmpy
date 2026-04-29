@@ -4,7 +4,7 @@ Serves three sine signals over TCP using the Arduino Giga R1's
 built-in WiFi. Works with the stock MicroPython firmware (no
 custom build required).
 
-Connect Loggbok (or any BlaeckTCP client) to the printed IP on port 9325.
+Connect a BlaeckTCP client to the printed IP on port 9325.
 """
 
 import math

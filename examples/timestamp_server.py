@@ -1,20 +1,21 @@
-"""Sine Generator — serves three sine signals over TCP.
+"""Timestamp Mode — WiFi.
 
-The simplest blaecktcmpy example for Arduino Giga R1.
-Connect a BlaeckTCP client to the device's
-IP on port 9325 to see live data.
+Demonstrates how to enable the micros timestamp mode so that each
+data frame includes elapsed microseconds since start.  This does
+not require a synced RTC — it works like Arduino's micros().
 
-Wiring: None required (uses onboard WiFi)
+Connect a BlaeckTCP client to the printed IP on port 9325.
 """
 
 import math
 import time
 import network
-from blaecktcmpy import BlaeckTCmPy
+from blaecktcmpy import BlaeckTCmPy, TimestampMode
 
 # -- WiFi Configuration --
 SSID = "YOUR_WIFI_SSID"
 PASSWORD = "YOUR_WIFI_PASSWORD"
+
 EXAMPLE_VERSION = "1.0"
 
 # -- Connect to WiFi --
@@ -33,23 +34,23 @@ print("IP:", wlan.ifconfig()[0])
 bltcp = BlaeckTCmPy(
     ip=wlan.ifconfig()[0],
     port=9325,
-    device_name="Sine Generator",
+    device_name="Timestamp Example",
     device_hw_version="Arduino Giga R1 WiFi",
     device_fw_version=EXAMPLE_VERSION,
 )
 
-for i in range(1, 4):
-    bltcp.add_signal("Sine_{}".format(i), "float")
+# Enable micros timestamp mode (microseconds since start)
+bltcp.timestamp_mode = TimestampMode.MICROS
+
+bltcp.add_signal("Sine_1", "float")
 
 bltcp.start()
 
 try:
     while True:
-        elapsed_ms = (time.time() - bltcp.start_time) * 1000
-        value = math.sin(elapsed_ms * 0.001)
-        for s in bltcp.signals:
-            s.value = value
+        elapsed_ms = bltcp.elapsed_ms
+        bltcp.signals["Sine_1"].value = math.sin(elapsed_ms * 0.001)
         bltcp.tick()
+        time.sleep_ms(1)
 except KeyboardInterrupt:
     bltcp.close()
-

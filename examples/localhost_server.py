@@ -1,6 +1,6 @@
 """Sine Generator — serves three sine signals over TCP.
 
-The simplest blaecktcmpy example. Run this, then connect Loggbok
+The simplest blaecktcmpy example. Run this, then connect a BlaeckTCP client
 (or any BlaeckTCP client) to 127.0.0.1:9325 to see live data.
 
 Usage:

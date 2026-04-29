@@ -268,7 +268,7 @@ class ClientManager:
 
             self._recv_buffers[sock] = buf
 
-        except OSError:
+        except (OSError, UnicodeError):
             self.disconnect(sock)
 
     def send_all(self, data: bytes) -> bool:

@@ -1,6 +1,6 @@
 """blaecktcmpy - MicroPython BlaeckTCP server library."""
 
-__version__ = "1.0.0"
+__version__ = "0.1.0"
 
 from .signal import Signal as Signal, SignalList as SignalList
 from .server import (
@@ -10,5 +10,6 @@ from .server import (
     INTERVAL_CLIENT as INTERVAL_CLIENT,
     INTERVAL_OFF as INTERVAL_OFF,
     TIMESTAMP_NONE as TIMESTAMP_NONE,
+    TIMESTAMP_MICROS as TIMESTAMP_MICROS,
     TIMESTAMP_UNIX as TIMESTAMP_UNIX,
 )

@@ -1,8 +1,10 @@
 # blaecktcmpy
 
+> ⚠️ **Early development** — this library is new and not yet fully tested. The API may change. Please report issues on GitHub.
+
 A MicroPython BlaeckTCP server library for real-time streaming of named, typed signals over TCP.
 
-Wire-compatible with [Loggbok](https://loggbok.net) and all BlaeckTCP clients.
+Wire-compatible with all BlaeckTCP clients.
 
 ## Supported Hardware
 
@@ -57,7 +59,7 @@ while True:
     bltcp.tick()
 ```
 
-Open Loggbok, connect to your device's IP on port 9325, and you'll see live data.
+Open a BlaeckTCP client, connect to your device's IP on port 9325, and you'll see live data.
 
 ## API Reference
 
@@ -110,9 +112,10 @@ Create a server instance.
 | Property | Description |
 |--------|-------------|
 | `local_interval_ms` | Interval mode: `>=0` (fixed ms), `INTERVAL_OFF` (-1), `INTERVAL_CLIENT` (-2, default) |
-| `timestamp_mode` | `TIMESTAMP_NONE` (0, default) or `TIMESTAMP_UNIX` (2) |
+| `timestamp_mode` | `TIMESTAMP_NONE` (0, default), `TIMESTAMP_MICROS` (1), or `TIMESTAMP_UNIX` (2) |
 | `connected` | True if any client is connected |
 | `data_clients` | Set of client IDs receiving data |
+| `elapsed_ms` | Milliseconds since `start()` was called |
 
 ### Callbacks (Decorators)
 
