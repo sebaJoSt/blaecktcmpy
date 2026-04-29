@@ -42,10 +42,17 @@ class ClientManager:
         self.data_clients: "set[int]" = set()
         self._client_meta: "dict[int, dict[str, str]]" = {}
         self._client_addrs: "dict[int, str]" = {}
-        # Map fileno -> socket for poll lookup
+        # Map fd/id -> socket for poll lookup
         self._fd_to_sock: "dict[int, socket.socket]" = {}
+        self._has_fileno: bool = True
 
     # -- Socket lifecycle --
+
+    def _sock_key(self, sock: "socket.socket") -> int:
+        """Return a key for the fd-to-socket map (fileno or id)."""
+        if self._has_fileno:
+            return sock.fileno()
+        return id(sock)
 
     def init_socket(self) -> None:
         """Create TCP server socket."""
@@ -66,7 +73,8 @@ class ClientManager:
         self._next_client_id = 0
         self._commanding_client = None
         self._fd_to_sock = {}
-        self._fd_to_sock[self._server_socket.fileno()] = self._server_socket
+        self._has_fileno = hasattr(self._server_socket, "fileno")
+        self._fd_to_sock[self._sock_key(self._server_socket)] = self._server_socket
 
         if _HAS_POLL:
             self._poll = select.poll()
@@ -92,7 +100,7 @@ class ClientManager:
                 # Set short timeout so reads don't block forever
                 conn.settimeout(0.01)
 
-                self._fd_to_sock[conn.fileno()] = conn
+                self._fd_to_sock[self._sock_key(conn)] = conn
                 if _HAS_POLL:
                     self._poll.register(conn, _POLLIN)
 

@@ -7,12 +7,32 @@ import struct
 if hasattr(time, "ticks_ms"):
     _ticks_ms = getattr(time, "ticks_ms")
     _ticks_diff = getattr(time, "ticks_diff")
+    _ticks_us = getattr(time, "ticks_us")
 else:
     def _ticks_ms() -> int:
         return int(time.time() * 1000)
 
     def _ticks_diff(a: int, b: int) -> int:
         return a - b
+
+    def _ticks_us() -> int:
+        return int(time.time() * 1_000_000)
+
+
+def _now_us(epoch_offset_us: int) -> int:
+    """Return current time in microseconds since Unix epoch.
+
+    On CPython: uses time.time_ns() for full precision.
+    On MicroPython: uses time.time() (integer seconds) + ticks_us()
+    for sub-second interpolation.
+    """
+    if hasattr(time, "time_ns"):
+        return time.time_ns() // 1_000 + epoch_offset_us
+    # MicroPython: time.time() is integer seconds from platform epoch.
+    # Use ticks_us() modulo 1_000_000 for the sub-second fraction.
+    sec = int(time.time())
+    frac = _ticks_us() % 1_000_000
+    return sec * 1_000_000 + frac + epoch_offset_us
 
 from .signal import Signal, SignalList, DATATYPE_TO_CODE
 from .encoder import (
@@ -154,7 +174,8 @@ class BlaeckTCmPy:
         self._timestamp_mode: int = TIMESTAMP_NONE
         self._schema_hash: int = 0
         self._started: bool = False
-        self._start_time: float = 0.0
+        self._start_time_us: int = 0
+        self._start_ticks: int = 0
 
         # Epoch offset for UNIX timestamps (MicroPython may use 2000 epoch)
         self._epoch_offset_us: int = 0
@@ -177,7 +198,8 @@ class BlaeckTCmPy:
         self._tcp.start_listening()
 
         self._started = True
-        self._start_time = time.time()
+        self._start_time_us: int = _now_us(self._epoch_offset_us)
+        self._start_ticks: int = _ticks_ms()
         self._update_schema_hash()
 
         # Activate fixed interval if set
@@ -431,8 +453,13 @@ class BlaeckTCmPy:
 
     @property
     def start_time(self) -> float:
-        """Wall-clock time when start() was called (time.time())."""
-        return self._start_time
+        """Wall-clock time when start() was called (seconds since Unix epoch)."""
+        return self._start_time_us / 1_000_000.0
+
+    @property
+    def elapsed_ms(self) -> int:
+        """Milliseconds elapsed since start() was called (high resolution)."""
+        return _ticks_diff(_ticks_ms(), self._start_ticks)
 
     @property
     def data_clients(self) -> "set[int]":
@@ -717,8 +744,7 @@ class BlaeckTCmPy:
     def _auto_timestamp(self) -> "int | None":
         """Return auto-generated timestamp for current mode, or None."""
         if self._timestamp_mode == TIMESTAMP_UNIX:
-            # time.time() returns seconds since MicroPython epoch
-            return int(time.time()) * 1_000_000 + self._epoch_offset_us
+            return _now_us(self._epoch_offset_us)
         return None
 
     def _require_started(self) -> None:
