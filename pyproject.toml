@@ -8,5 +8,5 @@ version = "1.0.0"
 description = "A MicroPython BlaeckTCP server library"
 license = "MIT"
 
-[tool.setuptools]
-packages = ["blaecktcmpy"]
+[tool.setuptools.packages.find]
+where = ["src"]
