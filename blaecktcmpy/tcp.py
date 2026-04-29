@@ -1,8 +1,9 @@
 """TCP client connection management for BlaeckTCmPy.
 
 Handles socket lifecycle, client accept/disconnect, polling,
-and message broadcasting. Uses select.poll() for readiness
-with blocking client sockets for reliable sends.
+and message broadcasting. Uses select.poll() when available
+(MicroPython, Linux) with select.select() fallback (Windows).
+Client sockets are blocking for reliable sends.
 """
 
 import socket
@@ -12,10 +13,13 @@ import select
 _CLIENT_RECV_CHUNK = 1024
 _MAX_RECV_BUFFER = 8192
 
-# Poll event flags
-_POLLIN = select.POLLIN
-_POLLHUP = getattr(select, "POLLHUP", 0x10)
-_POLLERR = getattr(select, "POLLERR", 0x08)
+# Detect poll availability
+_HAS_POLL = hasattr(select, "poll")
+
+if _HAS_POLL:
+    _POLLIN = select.POLLIN
+    _POLLHUP = getattr(select, "POLLHUP", 0x10)
+    _POLLERR = getattr(select, "POLLERR", 0x08)
 
 
 class ClientManager:
@@ -54,10 +58,14 @@ class ClientManager:
         self._clients = {}
         self._next_client_id = 0
         self._commanding_client = None
-        self._poll = select.poll()
-        self._poll.register(self._server_socket, _POLLIN)
         self._fd_to_sock = {}
         self._fd_to_sock[self._server_socket.fileno()] = self._server_socket
+
+        if _HAS_POLL:
+            self._poll = select.poll()
+            self._poll.register(self._server_socket, _POLLIN)
+        else:
+            self._poll = None
 
     # -- Client connections --
 
@@ -76,8 +84,9 @@ class ClientManager:
                 # Set short timeout so reads don't block forever
                 conn.settimeout(0.01)
 
-                self._poll.register(conn, _POLLIN)
                 self._fd_to_sock[conn.fileno()] = conn
+                if _HAS_POLL:
+                    self._poll.register(conn, _POLLIN)
 
                 client_id = self._next_client_id
                 self._next_client_id += 1
@@ -106,10 +115,11 @@ class ClientManager:
         """Remove and close a client connection."""
         client_id = self.client_id_for(conn)
 
-        try:
-            self._poll.unregister(conn)
-        except Exception:
-            pass
+        if _HAS_POLL and self._poll is not None:
+            try:
+                self._poll.unregister(conn)
+            except Exception:
+                pass
 
         fd = None
         for f, s in self._fd_to_sock.items():
@@ -151,26 +161,36 @@ class ClientManager:
 
     def read_commands(self):
         """Non-blocking read from all clients; parse <cmd,p1,p2> messages."""
-        if self._poll is None:
-            return []
-
         messages = []
 
-        # Poll with 0 timeout (non-blocking)
+        if _HAS_POLL and self._poll is not None:
+            ready_socks = self._poll_ready()
+        else:
+            ready_socks = self._select_ready()
+
+        for sock in ready_socks:
+            if sock is self._server_socket:
+                self.accept()
+            else:
+                self._read_from_client(sock, messages)
+
+        return messages
+
+    def _poll_ready(self):
+        """Get ready sockets using poll()."""
+        ready = []
         try:
-            # Use ipoll if available (less allocation)
             if hasattr(self._poll, "ipoll"):
                 events = self._poll.ipoll(0)
             else:
                 events = self._poll.poll(0)
         except OSError:
-            return messages
+            return ready
 
         for item in events:
             fd = item[0]
             event = item[1]
 
-            # Resolve socket from fileno or direct object
             if isinstance(fd, int):
                 sock = self._fd_to_sock.get(fd)
             else:
@@ -179,54 +199,61 @@ class ClientManager:
             if sock is None:
                 continue
 
-            # Handle errors/hangups
             if event & (_POLLHUP | _POLLERR):
                 if sock is not self._server_socket:
                     self.disconnect(sock)
                 continue
 
-            if not (event & _POLLIN):
-                continue
+            if event & _POLLIN:
+                ready.append(sock)
 
-            if sock is self._server_socket:
-                self.accept()
-            else:
-                try:
-                    chunk = sock.recv(_CLIENT_RECV_CHUNK)
-                    if not chunk:
-                        self.disconnect(sock)
-                        continue
+        return ready
 
-                    buf = self._recv_buffers.get(sock, "") + chunk.decode("utf-8")
+    def _select_ready(self):
+        """Get ready sockets using select.select() (Windows fallback)."""
+        all_socks = [self._server_socket] + list(self._clients.values())
+        try:
+            readable, _, _ = select.select(all_socks, [], [], 0)
+        except (OSError, ValueError):
+            return []
+        return readable
 
-                    if len(buf) > _MAX_RECV_BUFFER:
-                        self.disconnect(sock)
-                        continue
+    def _read_from_client(self, sock, messages):
+        """Read and parse commands from a single client socket."""
+        try:
+            chunk = sock.recv(_CLIENT_RECV_CHUNK)
+            if not chunk:
+                self.disconnect(sock)
+                return
 
-                    # Parse <cmd,param> messages
-                    while True:
-                        start = buf.find("<")
-                        if start == -1:
-                            buf = ""
-                            break
-                        end = buf.find(">", start)
-                        if end == -1:
-                            buf = buf[start:]
-                            break
-                        content = buf[start + 1:end]
-                        buf = buf[end + 1:]
+            buf = self._recv_buffers.get(sock, "") + chunk.decode("utf-8")
 
-                        parts = content.split(",")
-                        command = parts[0].strip()
-                        params = [p.strip() for p in parts[1:]] if len(parts) > 1 else []
-                        messages.append((command, params, sock))
+            if len(buf) > _MAX_RECV_BUFFER:
+                self.disconnect(sock)
+                return
 
-                    self._recv_buffers[sock] = buf
+            # Parse <cmd,param> messages
+            while True:
+                start = buf.find("<")
+                if start == -1:
+                    buf = ""
+                    break
+                end = buf.find(">", start)
+                if end == -1:
+                    buf = buf[start:]
+                    break
+                content = buf[start + 1:end]
+                buf = buf[end + 1:]
 
-                except OSError:
-                    self.disconnect(sock)
+                parts = content.split(",")
+                command = parts[0].strip()
+                params = [p.strip() for p in parts[1:]] if len(parts) > 1 else []
+                messages.append((command, params, sock))
 
-        return messages
+            self._recv_buffers[sock] = buf
+
+        except OSError:
+            self.disconnect(sock)
 
     def send_all(self, data):
         """Broadcast data to all connected clients."""
@@ -261,10 +288,11 @@ class ClientManager:
     def close(self):
         """Close all client sockets, the poll object, and the server socket."""
         for conn in list(self._clients.values()):
-            try:
-                self._poll.unregister(conn)
-            except Exception:
-                pass
+            if _HAS_POLL and self._poll is not None:
+                try:
+                    self._poll.unregister(conn)
+                except Exception:
+                    pass
             try:
                 conn.close()
             except OSError:

@@ -3,6 +3,17 @@
 import time
 import struct
 
+# Compatibility shim: provide ticks_ms/ticks_diff on CPython
+if not hasattr(time, "ticks_ms"):
+    def _ticks_ms():
+        return int(time.time() * 1000)
+
+    def _ticks_diff(a, b):
+        return a - b
+
+    time.ticks_ms = _ticks_ms
+    time.ticks_diff = _ticks_diff
+
 from .signal import Signal, SignalList, DATATYPE_TO_CODE
 from .encoder import (
     MSG_SYMBOL_LIST,
