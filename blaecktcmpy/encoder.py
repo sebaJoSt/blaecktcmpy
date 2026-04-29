@@ -133,16 +133,17 @@ def build_client_trailer(client_id, data_clients, client_meta):
 
 
 def compute_schema_hash(pairs):
-    """Compute CRC16 schema hash from (name, datatype_code) pairs.
+    """Compute CRC16-CCITT schema hash from (name, datatype_code) pairs.
 
+    Uses CRC-CCITT with init=0 (same as binascii.crc_hqx on CPython).
     Compatible with BlaeckTCP's schema hash algorithm.
     """
     data = bytearray()
     for name, code in pairs:
         data += name.encode()
         data.append(code)
-    # CRC16/CCITT-FALSE
-    crc = 0xFFFF
+    # CRC-CCITT with init=0 (polynomial 0x1021)
+    crc = 0x0000
     for byte in data:
         crc ^= byte << 8
         for _ in range(8):
