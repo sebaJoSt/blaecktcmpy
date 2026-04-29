@@ -4,16 +4,12 @@ Run this script, then connect with Loggbok to 127.0.0.1:9325.
 No hardware or WiFi required.
 
 Usage:
+    pip install -e .
     python examples/localhost_server.py
 """
 
 import math
 import time
-import sys
-import os
-
-# Add parent directory to path so we can import blaecktcmpy
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from blaecktcmpy import BlaeckTCmPy, Signal
 
