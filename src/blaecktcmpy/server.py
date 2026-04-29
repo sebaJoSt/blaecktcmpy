@@ -60,7 +60,7 @@ try:
 except ImportError:
     pass
 
-__version__ = "1.0.0"
+from . import __version__
 
 
 class IntervalMode:
