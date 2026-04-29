@@ -20,7 +20,6 @@ from .encoder import (
     MSG_DATA,
     MSG_DEVICES,
     STATUS_OK,
-    build_header,
     wrap_frame,
     build_data_frame,
     build_symbol_payload,
@@ -45,8 +44,8 @@ class IntervalMode:
     CLIENT (-2): Client controlled (default).
     """
 
-    OFF = -1
-    CLIENT = -2
+    OFF: int = -1
+    CLIENT: int = -2
 
 
 class TimestampMode:
@@ -56,8 +55,8 @@ class TimestampMode:
     UNIX (2): Microseconds since Unix epoch.
     """
 
-    NONE = 0
-    UNIX = 2
+    NONE: int = 0
+    UNIX: int = 2
 
 
 # Legacy constants (kept for backwards compatibility)
@@ -76,25 +75,25 @@ _MSG_ID_HUB = 185273100
 class _IntervalTimer:
     """Reusable interval timer using ticks_ms."""
 
-    def __init__(self):
-        self._interval_ms = 0
-        self._base_ms = 0
-        self._setpoint_ms = 0
-        self._first_tick = False
+    def __init__(self) -> None:
+        self._interval_ms: int = 0
+        self._base_ms: int = 0
+        self._setpoint_ms: int = 0
+        self._first_tick: bool = False
 
     @property
-    def interval_ms(self):
+    def interval_ms(self) -> int:
         return self._interval_ms
 
-    def activate(self, interval_ms):
+    def activate(self, interval_ms: int) -> None:
         self._interval_ms = interval_ms
         self._first_tick = True
 
-    def deactivate(self):
+    def deactivate(self) -> None:
         self._interval_ms = 0
         self._first_tick = False
 
-    def elapsed(self):
+    def elapsed(self) -> bool:
         if self._interval_ms == 0:
             return True
         now = _ticks_ms()
@@ -129,36 +128,36 @@ class BlaeckTCmPy:
             device_fw_version: Firmware version string
             verbose: Enable print output for connection events
         """
-        self._ip = ip
-        self._port = port
-        self._verbose = verbose
+        self._ip: str = ip
+        self._port: int = port
+        self._verbose: bool = verbose
 
         # Device info
-        self.signals = SignalList()
-        self._device_name = device_name.encode() if isinstance(device_name, str) else device_name
-        self._device_hw_version = device_hw_version.encode() if isinstance(device_hw_version, str) else device_hw_version
-        self._device_fw_version = device_fw_version.encode() if isinstance(device_fw_version, str) else device_fw_version
+        self.signals: SignalList = SignalList()
+        self._device_name: bytes = device_name.encode() if isinstance(device_name, str) else device_name
+        self._device_hw_version: bytes = device_hw_version.encode() if isinstance(device_hw_version, str) else device_hw_version
+        self._device_fw_version: bytes = device_fw_version.encode() if isinstance(device_fw_version, str) else device_fw_version
 
         # Protocol state
-        self._timed_activated = False
-        self._fixed_interval_ms = INTERVAL_CLIENT
-        self._timer = _IntervalTimer()
-        self._command_handlers = {}
-        self._read_callback = None
-        self._connect_callback = None
-        self._disconnect_callback = None
-        self._before_write_callback = None
-        self._server_restarted = True
-        self._restart_flag_pending = True
-        self._tcp = ClientManager(self, verbose)
-        self._closed = False
-        self._timestamp_mode = TIMESTAMP_NONE
-        self._schema_hash = 0
-        self._started = False
+        self._timed_activated: bool = False
+        self._fixed_interval_ms: int = INTERVAL_CLIENT
+        self._timer: _IntervalTimer = _IntervalTimer()
+        self._command_handlers: "dict[str, Callable[..., Any]]" = {}
+        self._read_callback: "Callable[..., Any] | None" = None
+        self._connect_callback: "Callable[[int], Any] | None" = None
+        self._disconnect_callback: "Callable[[int], Any] | None" = None
+        self._before_write_callback: "Callable[[], Any] | None" = None
+        self._server_restarted: bool = True
+        self._restart_flag_pending: bool = True
+        self._tcp: ClientManager = ClientManager(self, verbose)
+        self._closed: bool = False
+        self._timestamp_mode: int = TIMESTAMP_NONE
+        self._schema_hash: int = 0
+        self._started: bool = False
         self._start_time: float = 0.0
 
         # Epoch offset for UNIX timestamps (MicroPython may use 2000 epoch)
-        self._epoch_offset_us = 0
+        self._epoch_offset_us: int = 0
 
     # ================================================================
     # Lifecycle
@@ -200,13 +199,13 @@ class BlaeckTCmPy:
         if self._verbose:
             print("Server closed")
 
-    def __enter__(self):
+    def __enter__(self) -> "BlaeckTCmPy":
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args: "Any") -> None:
         self.close()
 
-    def _detect_epoch(self):
+    def _detect_epoch(self) -> None:
         """Detect MicroPython epoch and compute offset to Unix epoch."""
         try:
             epoch_year = time.gmtime(0)[0]
@@ -255,7 +254,7 @@ class BlaeckTCmPy:
         if self._started:
             self._update_schema_hash()
 
-    def _resolve_signal(self, key):
+    def _resolve_signal(self, key: "str | int") -> int:
         """Resolve a signal name or index to a valid index."""
         if isinstance(key, int):
             if 0 <= key < len(self.signals):
@@ -499,7 +498,7 @@ class BlaeckTCmPy:
             def log_all(command, *params):
                 print(command, params)
         """
-        def decorator(func):
+        def decorator(func: "Callable[..., Any]") -> "Callable[..., Any]":
             if command is None:
                 self._read_callback = func
             else:
@@ -515,7 +514,7 @@ class BlaeckTCmPy:
             def refresh():
                 bltcp.signals[0].value = read_sensor()
         """
-        def decorator(func):
+        def decorator(func: "Callable[..., Any]") -> "Callable[..., Any]":
             self._before_write_callback = func
             return func
         return decorator
@@ -528,7 +527,7 @@ class BlaeckTCmPy:
             def on_connect(client_id):
                 print("Client", client_id, "connected")
         """
-        def decorator(func):
+        def decorator(func: "Callable[..., Any]") -> "Callable[..., Any]":
             self._connect_callback = func
             return func
         return decorator
@@ -541,7 +540,7 @@ class BlaeckTCmPy:
             def on_disconnect(client_id):
                 print("Client", client_id, "left")
         """
-        def decorator(func):
+        def decorator(func: "Callable[..., Any]") -> "Callable[..., Any]":
             self._disconnect_callback = func
             return func
         return decorator
@@ -568,7 +567,7 @@ class BlaeckTCmPy:
             if self._read_callback is not None:
                 self._read_callback(command, *params)
 
-    def _dispatch_protocol_command(self, command, params, conn):
+    def _dispatch_protocol_command(self, command: str, params: "list[str]", conn: "Any") -> None:
         """Handle BLAECK.* protocol commands."""
         if command == "BLAECK.WRITE_SYMBOLS":
             self.write_symbols(self._decode_four_byte(params))
@@ -584,7 +583,7 @@ class BlaeckTCmPy:
         elif command == "BLAECK.WRITE_DATA":
             self.write_all_data(self._decode_four_byte(params))
 
-    def _update_client_identity(self, params, conn):
+    def _update_client_identity(self, params: "list[str]", conn: "Any") -> None:
         """Extract optional client name/type from GET_DEVICES params."""
         if len(params) <= 4:
             return
@@ -599,7 +598,7 @@ class BlaeckTCmPy:
                 print("Client #{} identified ({}: {})".format(client_id, rtype, name))
 
     @staticmethod
-    def _decode_four_byte(params):
+    def _decode_four_byte(params: "list[str]") -> int:
         """Decode up to 4 parameter bytes into a little-endian integer."""
         result = 0
         for i in range(min(4, len(params))):
@@ -609,7 +608,7 @@ class BlaeckTCmPy:
                 pass
         return result
 
-    def _set_timed_data(self, activated, interval_ms=0):
+    def _set_timed_data(self, activated: bool, interval_ms: int = 0) -> None:
         """Activate or deactivate timed data transmission."""
         self._timed_activated = activated
         if activated:
@@ -654,7 +653,7 @@ class BlaeckTCmPy:
 
         self._server_restarted = False
 
-    def _build_device_payload(self, client_id):
+    def _build_device_payload(self, client_id: int) -> bytes:
         """Build B6 payload: DeviceCount=1 + device entry + client trailer."""
         payload = b"\x01" + encode_device_entry(
             b"\x00",
@@ -676,7 +675,7 @@ class BlaeckTCmPy:
     # Internal Protocol
     # ================================================================
 
-    def _build_data_msg(self, header, start=0, end=-1, only_updated=False, timestamp=None, status=STATUS_OK, status_payload=b"\x00\x00\x00\x00"):
+    def _build_data_msg(self, header: bytes, start: int = 0, end: int = -1, only_updated: bool = False, timestamp: "int | None" = None, status: int = STATUS_OK, status_payload: bytes = b"\x00\x00\x00\x00") -> bytes:
         """Build data message with CRC32 checksum."""
         restart = self._restart_flag_pending
         self._restart_flag_pending = False
@@ -694,15 +693,15 @@ class BlaeckTCmPy:
             status_payload=status_payload,
         )
 
-    def _update_schema_hash(self):
+    def _update_schema_hash(self) -> None:
         """Recompute schema hash from all signals."""
-        pairs = []
+        pairs: "list[tuple[str, int]]" = []
         for sig in self.signals:
             code = DATATYPE_TO_CODE.get(sig.datatype, 0)
             pairs.append((sig.signal_name, code))
         self._schema_hash = compute_schema_hash(pairs)
 
-    def _resolve_timestamp(self, unix_timestamp):
+    def _resolve_timestamp(self, unix_timestamp: "float | int | None") -> "int | None":
         """Resolve timestamp to microseconds or None."""
         if unix_timestamp is not None:
             if self._timestamp_mode != TIMESTAMP_UNIX:
@@ -715,18 +714,18 @@ class BlaeckTCmPy:
 
         return self._auto_timestamp()
 
-    def _auto_timestamp(self):
+    def _auto_timestamp(self) -> "int | None":
         """Return auto-generated timestamp for current mode, or None."""
         if self._timestamp_mode == TIMESTAMP_UNIX:
             # time.time() returns seconds since MicroPython epoch
             return int(time.time()) * 1_000_000 + self._epoch_offset_us
         return None
 
-    def _require_started(self):
+    def _require_started(self) -> None:
         if not self._started:
             raise RuntimeError("Server not started - call start() first")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         n = len(self._tcp._clients)
         active = "active" if self._timed_activated else "inactive"
         return "blaecktcmpy [{} client(s)] [{}] ({} signals)".format(

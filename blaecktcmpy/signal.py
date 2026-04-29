@@ -1,10 +1,5 @@
 """Signal dataclass for BlaeckTCP typed data."""
 
-try:
-    from typing import Any
-except ImportError:
-    pass
-
 import struct
 
 

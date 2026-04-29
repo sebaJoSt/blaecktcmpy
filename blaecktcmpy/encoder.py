@@ -5,7 +5,6 @@ import binascii
 
 try:
     from typing import Any
-    from .signal import Signal
 except ImportError:
     pass
 

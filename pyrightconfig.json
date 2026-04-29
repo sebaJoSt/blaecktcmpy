@@ -1,0 +1,9 @@
+{
+  "include": ["blaecktcmpy"],
+  "pythonVersion": "3.9",
+  "typeCheckingMode": "strict",
+  "reportPrivateUsage": false,
+  "reportUnusedCallResult": false,
+  "reportUnnecessaryIsInstance": false,
+  "reportUnnecessaryComparison": false
+}

@@ -169,7 +169,7 @@ class ClientManager:
 
     def read_commands(self) -> "list[tuple[str, list[str], socket.socket]]":
         """Non-blocking read from all clients; parse <cmd,p1,p2> messages."""
-        messages = []
+        messages: "list[tuple[str, list[str], socket.socket]]" = []
 
         if _HAS_POLL and self._poll is not None:
             ready_socks = self._poll_ready()
@@ -186,7 +186,7 @@ class ClientManager:
 
     def _poll_ready(self) -> "list[socket.socket]":
         """Get ready sockets using poll()."""
-        ready = []
+        ready: "list[socket.socket]" = []
         try:
             if hasattr(self._poll, "ipoll"):
                 events = self._poll.ipoll(0)
