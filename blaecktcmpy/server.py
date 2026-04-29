@@ -4,15 +4,15 @@ import time
 import struct
 
 # Compatibility shim: provide ticks_ms/ticks_diff on CPython
-if not hasattr(time, "ticks_ms"):
-    def _ticks_ms():
+if hasattr(time, "ticks_ms"):
+    _ticks_ms = getattr(time, "ticks_ms")
+    _ticks_diff = getattr(time, "ticks_diff")
+else:
+    def _ticks_ms() -> int:
         return int(time.time() * 1000)
 
-    def _ticks_diff(a, b):
+    def _ticks_diff(a: int, b: int) -> int:
         return a - b
-
-    time.ticks_ms = _ticks_ms
-    time.ticks_diff = _ticks_diff
 
 from .signal import Signal, SignalList, DATATYPE_TO_CODE
 from .encoder import (
@@ -30,15 +30,43 @@ from .encoder import (
 )
 from .tcp import ClientManager
 
+try:
+    from typing import Any, Callable
+except ImportError:
+    pass
+
 __version__ = "1.0.0"
 
-# Interval mode constants
-INTERVAL_CLIENT = -2
-INTERVAL_OFF = -1
+
+class IntervalMode:
+    """Timed data interval modes.
+
+    OFF (-1): Timed data disabled; client ACTIVATE ignored.
+    CLIENT (-2): Client controlled (default).
+    """
+
+    OFF = -1
+    CLIENT = -2
+
+
+class TimestampMode:
+    """Timestamp modes for data frames.
+
+    NONE (0): No timestamp in data frames (default).
+    UNIX (2): Microseconds since Unix epoch.
+    """
+
+    NONE = 0
+    UNIX = 2
+
+
+# Legacy constants (kept for backwards compatibility)
+INTERVAL_CLIENT = IntervalMode.CLIENT
+INTERVAL_OFF = IntervalMode.OFF
 
 # Timestamp mode constants
-TIMESTAMP_NONE = 0
-TIMESTAMP_UNIX = 2
+TIMESTAMP_NONE = TimestampMode.NONE
+TIMESTAMP_UNIX = TimestampMode.UNIX
 
 # Message IDs for data frames
 _MSG_ID_ACTIVATE = 185273099
@@ -69,13 +97,13 @@ class _IntervalTimer:
     def elapsed(self):
         if self._interval_ms == 0:
             return True
-        now = time.ticks_ms()
+        now = _ticks_ms()
         if self._first_tick:
             self._base_ms = now
             self._setpoint_ms = self._interval_ms
             self._first_tick = False
             return True
-        elapsed_ms = time.ticks_diff(now, self._base_ms)
+        elapsed_ms = _ticks_diff(now, self._base_ms)
         if elapsed_ms < self._setpoint_ms:
             return False
         while self._setpoint_ms <= elapsed_ms:
@@ -90,7 +118,7 @@ class BlaeckTCmPy:
     and all BlaeckTCP clients.
     """
 
-    def __init__(self, ip, port, device_name, device_hw_version="", device_fw_version="1.0", verbose=True):
+    def __init__(self, ip: str, port: int, device_name: str, device_hw_version: str = "", device_fw_version: str = "1.0", verbose: bool = True) -> None:
         """Initialize BlaeckTCmPy.
 
         Args:
@@ -127,6 +155,7 @@ class BlaeckTCmPy:
         self._timestamp_mode = TIMESTAMP_NONE
         self._schema_hash = 0
         self._started = False
+        self._start_time: float = 0.0
 
         # Epoch offset for UNIX timestamps (MicroPython may use 2000 epoch)
         self._epoch_offset_us = 0
@@ -135,7 +164,7 @@ class BlaeckTCmPy:
     # Lifecycle
     # ================================================================
 
-    def start(self):
+    def start(self) -> None:
         """Create socket, bind, listen, and activate."""
         if self._started:
             raise RuntimeError("Already started")
@@ -162,7 +191,7 @@ class BlaeckTCmPy:
                 __version__, self._ip, self._port
             ))
 
-    def close(self):
+    def close(self) -> None:
         """Close all connections."""
         if self._closed:
             return
@@ -194,7 +223,7 @@ class BlaeckTCmPy:
     # Signal Management
     # ================================================================
 
-    def add_signal(self, signal_or_name, datatype="", value=0):
+    def add_signal(self, signal_or_name: "Signal | str", datatype: str = "", value: "Any" = 0) -> "Signal":
         """Add a local signal.
 
         Can be called with a Signal object or with arguments:
@@ -215,12 +244,12 @@ class BlaeckTCmPy:
             self._update_schema_hash()
         return sig
 
-    def add_signals(self, signals):
+    def add_signals(self, signals: "list[Signal]") -> None:
         """Add multiple signals at once."""
         for sig in signals:
             self.add_signal(sig)
 
-    def delete_signals(self):
+    def delete_signals(self) -> None:
         """Remove all signals."""
         self.signals.clear()
         if self._started:
@@ -241,7 +270,7 @@ class BlaeckTCmPy:
     # Write Methods
     # ================================================================
 
-    def write(self, key, value, msg_id=1, unix_timestamp=None):
+    def write(self, key: "str | int", value: "Any", msg_id: int = 1, unix_timestamp: "float | int | None" = None) -> None:
         """Update a single signal's value and immediately send it."""
         self._require_started()
         idx = self._resolve_signal(key)
@@ -255,36 +284,36 @@ class BlaeckTCmPy:
         )
         self._tcp.send_data(data)
 
-    def update(self, key, value):
+    def update(self, key: "str | int", value: "Any") -> None:
         """Update a signal's value and mark it as updated (no send)."""
         idx = self._resolve_signal(key)
         self.signals[idx].value = value
         self.signals[idx].updated = True
 
-    def mark_signal_updated(self, key):
+    def mark_signal_updated(self, key: "str | int") -> None:
         """Mark a signal as updated without changing its value."""
         idx = self._resolve_signal(key)
         self.signals[idx].updated = True
 
-    def mark_all_signals_updated(self):
+    def mark_all_signals_updated(self) -> None:
         """Mark all signals as updated."""
         for i in range(len(self.signals)):
             self.signals[i].updated = True
 
-    def clear_all_update_flags(self):
+    def clear_all_update_flags(self) -> None:
         """Clear the updated flag on all signals."""
         for i in range(len(self.signals)):
             self.signals[i].updated = False
 
     @property
-    def has_updated_signals(self):
+    def has_updated_signals(self) -> bool:
         """True if any signal is marked as updated."""
         for i in range(len(self.signals)):
             if self.signals[i].updated:
                 return True
         return False
 
-    def write_all_data(self, msg_id=1, unix_timestamp=None):
+    def write_all_data(self, msg_id: int = 1, unix_timestamp: "float | int | None" = None) -> None:
         """Send all signal data to data-enabled clients."""
         self._require_started()
         if not self.connected:
@@ -301,7 +330,7 @@ class BlaeckTCmPy:
         )
         self._tcp.send_data(data)
 
-    def write_updated_data(self, msg_id=1, unix_timestamp=None):
+    def write_updated_data(self, msg_id: int = 1, unix_timestamp: "float | int | None" = None) -> None:
         """Send only updated signals to data-enabled clients."""
         self._require_started()
         if not self.connected or not self.has_updated_signals:
@@ -318,7 +347,7 @@ class BlaeckTCmPy:
         )
         self._tcp.send_data(data)
 
-    def timed_write_all_data(self, msg_id=None, unix_timestamp=None):
+    def timed_write_all_data(self, msg_id: "int | None" = None, unix_timestamp: "float | int | None" = None) -> bool:
         """Send all data if timer interval has elapsed. Returns True if sent."""
         self._require_started()
         if msg_id is None:
@@ -341,7 +370,7 @@ class BlaeckTCmPy:
         )
         return self._tcp.send_data(data)
 
-    def timed_write_updated_data(self, msg_id=None, unix_timestamp=None):
+    def timed_write_updated_data(self, msg_id: "int | None" = None, unix_timestamp: "float | int | None" = None) -> bool:
         """Send only updated signals if timer interval has elapsed. Returns True if sent."""
         self._require_started()
         if msg_id is None:
@@ -370,7 +399,7 @@ class BlaeckTCmPy:
     # Main Loop
     # ================================================================
 
-    def tick(self, msg_id=None):
+    def tick(self, msg_id: "int | None" = None) -> bool:
         """Main loop tick - read commands and send all data on timer.
 
         Call this repeatedly in your main loop.
@@ -379,7 +408,7 @@ class BlaeckTCmPy:
         self.read()
         return self.timed_write_all_data(msg_id)
 
-    def tick_updated(self, msg_id=None):
+    def tick_updated(self, msg_id: "int | None" = None) -> bool:
         """Main loop tick - read commands and send only updated data.
 
         Returns True if timed data was sent.
@@ -392,26 +421,31 @@ class BlaeckTCmPy:
     # ================================================================
 
     @property
-    def connected(self):
+    def connected(self) -> bool:
         """True if any client is connected."""
         return bool(self._tcp._clients)
 
     @property
-    def start_time(self):
+    def commanding_client(self):
+        """The client socket that sent the most recent command, or None."""
+        return self._tcp._commanding_client
+
+    @property
+    def start_time(self) -> float:
         """Wall-clock time when start() was called (time.time())."""
         return self._start_time
 
     @property
-    def data_clients(self):
+    def data_clients(self) -> "set[int]":
         """Set of client IDs that receive data frames."""
         return self._tcp.data_clients
 
     @data_clients.setter
-    def data_clients(self, value):
+    def data_clients(self, value: "set[int]") -> None:
         self._tcp.data_clients = value
 
     @property
-    def local_interval_ms(self):
+    def local_interval_ms(self) -> int:
         """Local signal timed data interval mode.
 
         >= 0: Lock at given rate (ms). Client ACTIVATE/DEACTIVATE ignored.
@@ -421,7 +455,7 @@ class BlaeckTCmPy:
         return self._fixed_interval_ms
 
     @local_interval_ms.setter
-    def local_interval_ms(self, value):
+    def local_interval_ms(self, value: int) -> None:
         if value >= 0:
             self._fixed_interval_ms = value
             self._timed_activated = True
@@ -436,12 +470,12 @@ class BlaeckTCmPy:
             raise ValueError("Invalid local_interval_ms: {}".format(value))
 
     @property
-    def timestamp_mode(self):
+    def timestamp_mode(self) -> int:
         """Timestamp mode: TIMESTAMP_NONE (0) or TIMESTAMP_UNIX (2)."""
         return self._timestamp_mode
 
     @timestamp_mode.setter
-    def timestamp_mode(self, value):
+    def timestamp_mode(self, value: int) -> None:
         if value not in (TIMESTAMP_NONE, TIMESTAMP_UNIX):
             raise ValueError("Invalid timestamp_mode: {}".format(value))
         self._timestamp_mode = value
@@ -450,7 +484,7 @@ class BlaeckTCmPy:
     # Callbacks (decorator API)
     # ================================================================
 
-    def on_command(self, command=None):
+    def on_command(self, command: "str | None" = None) -> "Callable[..., Any]":
         """Decorator to register a command handler.
 
         With a command name: handles that specific command.
@@ -473,7 +507,7 @@ class BlaeckTCmPy:
             return func
         return decorator
 
-    def on_before_write(self):
+    def on_before_write(self) -> "Callable[..., Any]":
         """Decorator for callback that fires before data is written.
 
         Example:
@@ -486,7 +520,7 @@ class BlaeckTCmPy:
             return func
         return decorator
 
-    def on_client_connected(self):
+    def on_client_connected(self) -> "Callable[..., Any]":
         """Decorator for callback when a client connects.
 
         Example:
@@ -499,7 +533,7 @@ class BlaeckTCmPy:
             return func
         return decorator
 
-    def on_client_disconnected(self):
+    def on_client_disconnected(self) -> "Callable[..., Any]":
         """Decorator for callback when a client disconnects.
 
         Example:
@@ -516,7 +550,7 @@ class BlaeckTCmPy:
     # Command Processing
     # ================================================================
 
-    def read(self):
+    def read(self) -> None:
         """Read and process all pending messages from clients."""
         self._require_started()
         messages = self._tcp.read_commands()
@@ -595,7 +629,7 @@ class BlaeckTCmPy:
     # Message Writers
     # ================================================================
 
-    def write_symbols(self, msg_id=1):
+    def write_symbols(self, msg_id: int = 1) -> None:
         """Send symbol list to connected clients."""
         if not self.connected:
             return
@@ -604,7 +638,7 @@ class BlaeckTCmPy:
         data = wrap_frame(header + payload)
         self._tcp.send_all(data)
 
-    def write_devices(self, msg_id=1):
+    def write_devices(self, msg_id: int = 1) -> None:
         """Send device information to each connected client."""
         if not self.connected:
             return

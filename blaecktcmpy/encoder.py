@@ -3,45 +3,51 @@
 import struct
 import binascii
 
+try:
+    from typing import Any
+    from .signal import Signal
+except ImportError:
+    pass
+
 
 # Message type keys
-MSG_SYMBOL_LIST = b"\xb0"
-MSG_DATA = b"\xd2"
-MSG_DEVICES = b"\xb6"
+MSG_SYMBOL_LIST: bytes = b"\xb0"
+MSG_DATA: bytes = b"\xd2"
+MSG_DEVICES: bytes = b"\xb6"
 
 # Status byte values for data frames
-STATUS_OK = 0x00
-STATUS_UPSTREAM_LOST = 0x80
-STATUS_UPSTREAM_RECONNECTED = 0x81
+STATUS_OK: int = 0x00
+STATUS_UPSTREAM_LOST: int = 0x80
+STATUS_UPSTREAM_RECONNECTED: int = 0x81
 
 # MasterSlaveConfig byte values
-MSC_MASTER = b"\x01"
-MSC_SLAVE = b"\x02"
+MSC_MASTER: bytes = b"\x01"
+MSC_SLAVE: bytes = b"\x02"
 
 
-def build_header(msg_key, msg_id):
+def build_header(msg_key: bytes, msg_id: int) -> bytes:
     """Build the common message header: MSGKEY : MSGID(4) :"""
     return msg_key + b":" + struct.pack("<I", msg_id) + b":"
 
 
-def wrap_frame(content):
+def wrap_frame(content: bytes) -> bytes:
     """Wrap encoded content in BlaeckTCP frame markers."""
     return b"<BLAECK:" + content + b"/BLAECK>\r\n"
 
 
 def build_data_frame(
-    header,
-    signals,
-    start=0,
-    end=-1,
-    schema_hash=0,
-    restart_flag=False,
-    timestamp_mode=0,
-    timestamp=None,
-    only_updated=False,
-    status=STATUS_OK,
-    status_payload=b"\x00\x00\x00\x00",
-):
+    header: bytes,
+    signals: "Any",
+    start: int = 0,
+    end: int = -1,
+    schema_hash: int = 0,
+    restart_flag: bool = False,
+    timestamp_mode: int = 0,
+    timestamp: "int | None" = None,
+    only_updated: bool = False,
+    status: int = STATUS_OK,
+    status_payload: bytes = b"\x00\x00\x00\x00",
+) -> bytes:
     """Build a D2 data frame with CRC32 checksum."""
     if end == -1:
         end = len(signals) - 1
@@ -79,7 +85,7 @@ def build_data_frame(
     return frame_no_crc + crc
 
 
-def build_symbol_payload(signals, master_slave_config=b"\x00", slave_id=b"\x00"):
+def build_symbol_payload(signals: "Any", master_slave_config: bytes = b"\x00", slave_id: bytes = b"\x00") -> bytes:
     """Build the symbol-list payload for simple server mode."""
     result = bytearray()
     for sig in signals:
@@ -93,7 +99,7 @@ def build_symbol_payload(signals, master_slave_config=b"\x00", slave_id=b"\x00")
     return bytes(result)
 
 
-def encode_device_entry(msc, slave_id, name, hw, fw, lib_ver, lib_name, restarted, device_type, parent):
+def encode_device_entry(msc: bytes, slave_id: bytes, name: bytes, hw: bytes, fw: bytes, lib_ver: bytes, lib_name: bytes, restarted: bytes, device_type: bytes, parent: bytes) -> bytes:
     """Encode a single B6 device entry."""
     return (
         msc
@@ -117,7 +123,7 @@ def encode_device_entry(msc, slave_id, name, hw, fw, lib_ver, lib_name, restarte
     )
 
 
-def build_client_trailer(client_id, data_clients, client_meta):
+def build_client_trailer(client_id: int, data_clients: "set[int]", client_meta: "dict[int, dict[str, str]]") -> bytes:
     """Build B6 client trailer: ClientNo, DataEnabled, ClientName, ClientType."""
     meta = client_meta.get(client_id, {})
     return (
@@ -132,7 +138,7 @@ def build_client_trailer(client_id, data_clients, client_meta):
     )
 
 
-def compute_schema_hash(pairs):
+def compute_schema_hash(pairs: "list[tuple[str, int]]") -> int:
     """Compute CRC16-CCITT schema hash from (name, datatype_code) pairs.
 
     Uses CRC-CCITT with init=0 (same as binascii.crc_hqx on CPython).

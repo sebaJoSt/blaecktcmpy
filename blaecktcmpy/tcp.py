@@ -9,6 +9,11 @@ Client sockets are blocking for reliable sends.
 import socket
 import select
 
+try:
+    from typing import Any
+except ImportError:
+    pass
+
 
 _CLIENT_RECV_CHUNK = 1024
 _MAX_RECV_BUFFER = 8192
@@ -25,34 +30,36 @@ if _HAS_POLL:
 class ClientManager:
     """Manages TCP server socket and downstream client connections."""
 
-    def __init__(self, server, verbose=False):
+    def __init__(self, server: "Any", verbose: bool = False) -> None:
         self._server = server
         self._verbose = verbose
-        self._server_socket = None
-        self._clients = {}
-        self._next_client_id = 0
-        self._commanding_client = None
-        self._poll = None
-        self._recv_buffers = {}
-        self.data_clients = set()
-        self._client_meta = {}
-        self._client_addrs = {}
+        self._server_socket: "socket.socket | None" = None
+        self._clients: "dict[int, socket.socket]" = {}
+        self._next_client_id: int = 0
+        self._commanding_client: "socket.socket | None" = None
+        self._poll: "Any" = None
+        self._recv_buffers: "dict[socket.socket, str]" = {}
+        self.data_clients: "set[int]" = set()
+        self._client_meta: "dict[int, dict[str, str]]" = {}
+        self._client_addrs: "dict[int, str]" = {}
         # Map fileno -> socket for poll lookup
-        self._fd_to_sock = {}
+        self._fd_to_sock: "dict[int, socket.socket]" = {}
 
     # -- Socket lifecycle --
 
-    def init_socket(self):
+    def init_socket(self) -> None:
         """Create TCP server socket."""
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-    def bind(self, ip, port):
+    def bind(self, ip: str, port: int) -> None:
         """Bind server socket to ip:port."""
+        assert self._server_socket is not None
         self._server_socket.bind((ip, port))
 
-    def start_listening(self):
+    def start_listening(self) -> None:
         """Set non-blocking mode on server socket and start listening."""
+        assert self._server_socket is not None
         self._server_socket.setblocking(False)
         self._server_socket.listen(5)
         self._clients = {}
@@ -69,8 +76,9 @@ class ClientManager:
 
     # -- Client connections --
 
-    def accept(self):
+    def accept(self) -> None:
         """Accept all pending new connections."""
+        assert self._server_socket is not None
         while True:
             try:
                 conn, addr = self._server_socket.accept()
@@ -104,14 +112,14 @@ class ClientManager:
             except OSError:
                 break
 
-    def client_id_for(self, conn):
+    def client_id_for(self, conn: "socket.socket") -> int:
         """Find the client ID for a given socket, or -1 if not found."""
         for cid, c in self._clients.items():
             if c is conn:
                 return cid
         return -1
 
-    def disconnect(self, conn):
+    def disconnect(self, conn: "socket.socket") -> None:
         """Remove and close a client connection."""
         client_id = self.client_id_for(conn)
 
@@ -159,7 +167,7 @@ class ClientManager:
 
     # -- I/O --
 
-    def read_commands(self):
+    def read_commands(self) -> "list[tuple[str, list[str], socket.socket]]":
         """Non-blocking read from all clients; parse <cmd,p1,p2> messages."""
         messages = []
 
@@ -176,7 +184,7 @@ class ClientManager:
 
         return messages
 
-    def _poll_ready(self):
+    def _poll_ready(self) -> "list[socket.socket]":
         """Get ready sockets using poll()."""
         ready = []
         try:
@@ -209,7 +217,7 @@ class ClientManager:
 
         return ready
 
-    def _select_ready(self):
+    def _select_ready(self) -> "list[Any]":
         """Get ready sockets using select.select() (Windows fallback)."""
         all_socks = [self._server_socket] + list(self._clients.values())
         try:
@@ -218,7 +226,7 @@ class ClientManager:
             return []
         return readable
 
-    def _read_from_client(self, sock, messages):
+    def _read_from_client(self, sock: "socket.socket", messages: "list[tuple[str, list[str], socket.socket]]") -> None:
         """Read and parse commands from a single client socket."""
         try:
             chunk = sock.recv(_CLIENT_RECV_CHUNK)
@@ -255,7 +263,7 @@ class ClientManager:
         except OSError:
             self.disconnect(sock)
 
-    def send_all(self, data):
+    def send_all(self, data: bytes) -> bool:
         """Broadcast data to all connected clients."""
         if not self._clients:
             return False
@@ -268,7 +276,7 @@ class ClientManager:
                 self.disconnect(conn)
         return sent
 
-    def send_data(self, data):
+    def send_data(self, data: bytes) -> bool:
         """Send data only to clients in data_clients set."""
         if not self._clients:
             return False
@@ -285,7 +293,7 @@ class ClientManager:
 
     # -- Cleanup --
 
-    def close(self):
+    def close(self) -> None:
         """Close all client sockets, the poll object, and the server socket."""
         for conn in list(self._clients.values()):
             if _HAS_POLL and self._poll is not None:

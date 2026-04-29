@@ -1,9 +1,14 @@
 """Signal dataclass for BlaeckTCP typed data."""
 
+try:
+    from typing import Any
+except ImportError:
+    pass
+
 import struct
 
 
-DATATYPE_TO_CODE = {
+DATATYPE_TO_CODE: "dict[str, int]" = {
     "bool": 0,
     "byte": 1,
     "short": 2,
@@ -16,7 +21,7 @@ DATATYPE_TO_CODE = {
     "double": 9,
 }
 
-DATATYPE_SIZES = {
+DATATYPE_SIZES: "dict[str, int]" = {
     "bool": 1,
     "byte": 1,
     "short": 2,
@@ -30,7 +35,7 @@ DATATYPE_SIZES = {
 }
 
 # struct format strings for each datatype (little-endian)
-_STRUCT_FORMATS = {
+_STRUCT_FORMATS: "dict[str, str]" = {
     "bool": "<B",
     "byte": "<B",
     "short": "<h",
@@ -43,30 +48,34 @@ _STRUCT_FORMATS = {
     "double": "<d",
 }
 
-SIGNED_TYPES = {"short", "int", "long"}
-FLOAT_TYPES = {"float", "double"}
+SIGNED_TYPES: "set[str]" = {"short", "int", "long"}
+FLOAT_TYPES: "set[str]" = {"float", "double"}
 
 
 class Signal:
     """Represents a BlaeckTCP signal with typed data."""
 
-    def __init__(self, signal_name, datatype, value=0, updated=False):
+    signal_name: str
+    datatype: str
+    updated: bool
+
+    def __init__(self, signal_name: str, datatype: str, value: "int | float" = 0, updated: bool = False) -> None:
         self.signal_name = signal_name
         self.datatype = datatype
         self.updated = updated
         if datatype not in DATATYPE_TO_CODE:
             raise ValueError("Invalid datatype: " + datatype)
-        self._value = self._normalize_value(value)
+        self._value: "int | float | bool" = self._normalize_value(value)
 
     @property
-    def value(self):
+    def value(self) -> "int | float | bool":
         return self._value
 
     @value.setter
-    def value(self, value):
+    def value(self, value: "int | float") -> None:
         self._value = self._normalize_value(value)
 
-    def _normalize_value(self, value):
+    def _normalize_value(self, value: "int | float") -> "int | float | bool":
         if self.datatype in FLOAT_TYPES:
             return float(value)
 
@@ -101,7 +110,7 @@ class Signal:
             return bool(normalized)
         return normalized
 
-    def _integer_range(self):
+    def _integer_range(self) -> "tuple[int, int]":
         if self.datatype == "bool":
             return 0, 1
         bits = DATATYPE_SIZES[self.datatype] * 8
@@ -109,18 +118,18 @@ class Signal:
             return -(1 << (bits - 1)), (1 << (bits - 1)) - 1
         return 0, (1 << bits) - 1
 
-    def to_bytes(self):
+    def to_bytes(self) -> bytes:
         """Convert signal value to bytes using struct.pack."""
         fmt = _STRUCT_FORMATS[self.datatype]
         if self.datatype == "bool":
             return struct.pack(fmt, 1 if self._value else 0)
         return struct.pack(fmt, self._value)
 
-    def get_dtype_byte(self):
+    def get_dtype_byte(self) -> bytes:
         """Get the datatype code as a single byte."""
         return bytes([DATATYPE_TO_CODE[self.datatype]])
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "{}: {} = {}".format(self.signal_name, self.datatype, self._value)
 
 
@@ -130,36 +139,37 @@ class SignalList:
     Supports indexing by integer or signal name.
     """
 
-    def __init__(self):
-        self._signals = []
+    def __init__(self) -> None:
+        self._signals: "list[Signal]" = []
+        self._name_cache: "dict[str, int] | None" = None
+
+    def _invalidate_cache(self) -> None:
         self._name_cache = None
 
-    def _invalidate_cache(self):
-        self._name_cache = None
-
-    def _ensure_cache(self):
+    def _ensure_cache(self) -> None:
         if self._name_cache is None:
             self._name_cache = {}
             for i, sig in enumerate(self._signals):
                 self._name_cache[sig.signal_name] = i
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._signals)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: "str | int") -> "Signal":
         if isinstance(key, str):
             self._ensure_cache()
+            assert self._name_cache is not None
             idx = self._name_cache.get(key)
             if idx is None:
                 raise KeyError("No signal named '{}'".format(key))
             return self._signals[idx]
         return self._signals[key]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: int, value: "Signal") -> None:
         self._signals[key] = value
         self._invalidate_cache()
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: "int | slice") -> None:
         if isinstance(key, slice):
             del self._signals[key]
         else:
@@ -169,24 +179,34 @@ class SignalList:
     def __iter__(self):
         return iter(self._signals)
 
-    def append(self, item):
+    def append(self, item: "Signal") -> None:
         self._signals.append(item)
         self._invalidate_cache()
 
-    def insert(self, index, item):
+    def extend(self, items: "list[Signal]") -> None:
+        self._signals.extend(items)
+        self._invalidate_cache()
+
+    def insert(self, index: int, item: "Signal") -> None:
         self._signals.insert(index, item)
         self._invalidate_cache()
 
-    def pop(self, index=-1):
+    def remove(self, item: "Signal") -> None:
+        self._signals.remove(item)
+        self._invalidate_cache()
+
+    def pop(self, index: int = -1) -> "Signal":
         result = self._signals.pop(index)
         self._invalidate_cache()
         return result
 
-    def clear(self):
+    def clear(self) -> None:
         self._signals.clear()
         self._invalidate_cache()
 
-    def index_of(self, name):
+    def index_of(self, name: str) -> "int | None":
         """Return the index of a signal by name, or None if not found."""
         self._ensure_cache()
+        assert self._name_cache is not None
         return self._name_cache.get(name)
+
